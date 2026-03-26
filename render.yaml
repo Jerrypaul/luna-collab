@@ -1,0 +1,23 @@
+services:
+  - type: worker
+    name: discord-role-cleanup-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: GUILD_ID
+        sync: false
+      - key: VERIFIED_ROLE_ID
+        value: "1486155592052506645"
+      - key: UNVERIFIED_ROLE_ID
+        value: "1484882152276496557"
+      - key: LIVE_NOW_ROLE_ID
+        sync: false
+      - key: LIVE_ROLE_DURATION_MS
+        value: "7200000"
+      - key: LOG_CHANNEL_ID
+        value: "1486503589290573945"

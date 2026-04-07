@@ -12,12 +12,22 @@ services:
       - key: GUILD_ID
         sync: false
       - key: VERIFIED_ROLE_ID
-        value: "1486155592052506645"
+        sync: false
       - key: UNVERIFIED_ROLE_ID
-        value: "1484882152276496557"
+        sync: false
       - key: LIVE_NOW_ROLE_ID
         sync: false
       - key: LIVE_ROLE_DURATION_MS
         value: "7200000"
       - key: LOG_CHANNEL_ID
-        value: "1486503589290573945"
+        sync: false
+      - key: TWITCH_CLIENT_ID
+        sync: false
+      - key: TWITCH_CLIENT_SECRET
+        sync: false
+      - key: TWITCH_POLL_INTERVAL_MS
+        value: "60000"
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"

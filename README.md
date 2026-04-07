@@ -4,20 +4,22 @@ Small `discord.js` bot for:
 
 - assigning the `unverified` role to new members
 - removing `unverified` when Linked Roles adds `verified`
-- letting members use `/live` to add the "Live Now" role
-- letting members use `/unlive` to remove the "Live Now" role early
-- automatically removing the "Live Now" role after a configurable delay
+- letting members use `/live` to add the "Live Now" role manually
+- letting members use `/unlive` to remove the "Live Now" role manually
+- linking Discord users to Twitch accounts with moderator approval
+- automatically syncing the same "Live Now" role from approved Twitch live status
+- automatically removing the manual live role after a configurable delay when Twitch is not reporting the user as live
 - running a startup scan once per process to clean up members who already have both verification roles
 
 ## Local setup
 
 1. Install Node.js 20 or newer.
 2. Copy `.env.example` to `.env`.
-3. Fill in the bot token and IDs.
+3. Fill in the bot token, Discord role IDs, Twitch credentials, and Postgres connection string.
 4. Run `npm install`.
 5. Run `npm start`.
 
-After the bot starts in your guild, Discord should register `/live` and `/unlive` for that server.
+After the bot starts in your guild, Discord should register `/live`, `/unlive`, `/linktwitch`, `/unlinktwitch`, `/mytwitch`, `/approvetwitch`, and `/denytwitch`.
 
 For local development, you can also use:
 
@@ -33,10 +35,24 @@ npm run dev
 - `LIVE_NOW_ROLE_ID`
 - `LOG_CHANNEL_ID`
 
-## Optional environment variables
+## Twitch and database environment variables
 
-- `GUILD_ID`
-- `LIVE_ROLE_DURATION_MS`
+- `TWITCH_CLIENT_ID`
+- `TWITCH_CLIENT_SECRET`
+- `TWITCH_POLL_INTERVAL_MS`
+- `DATABASE_URL`
+- `DATABASE_SSL`
+
+## How Twitch linking works
+
+- `/linktwitch username:<string>` validates the Twitch username through the Twitch API and stores it in Postgres.
+- `/mytwitch` shows the caller's current Twitch link and approval state.
+- `/unlinktwitch` removes the caller's mapping.
+- `/approvetwitch user:<discord user>` marks that mapping approved.
+- `/denytwitch user:<discord user>` clears approval.
+- Only approved mappings are included in automatic Twitch live polling.
+
+The bot creates a `twitch_links` table automatically if it does not already exist.
 
 ## Render setup
 
@@ -45,15 +61,13 @@ This repo includes `render.yaml`. On Render:
 1. Create a new Worker Service from this repo.
 2. Confirm the build command is `npm install`.
 3. Confirm the start command is `npm start`.
-4. Set `DISCORD_BOT_TOKEN` in Render environment variables.
-5. Set `LIVE_NOW_ROLE_ID` to the role you want `/live` to assign.
-6. Optionally set `LIVE_ROLE_DURATION_MS` if you want a different expiry time than 2 hours.
-7. Update any other role or channel IDs if needed.
+4. Set `DISCORD_BOT_TOKEN`, your Discord IDs, `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, and `DATABASE_URL`.
+5. Leave `DATABASE_SSL=true` unless your local Postgres setup needs it disabled.
 
 ## Notes
 
-The timed removal uses an in-memory timer. That keeps the bot simple and works well for local testing and basic Render usage, but if the bot restarts before the timer finishes, that pending removal will be lost.
+The Twitch poller batches `Get Streams` requests in groups of up to 100 login names and waits for 2 consecutive offline results before removing the live role.
 
-This bot does not DM unverified users or post reminder spam. It only manages roles and logs `/live` and `/unlive` actions.
+Manual `/live` and `/unlive` still work as a fallback lane. Manual timeout removal will not strip the role while Twitch still reports that user as live.
 
 This bot does not expose an HTTP server, so a Render worker is the right fit.

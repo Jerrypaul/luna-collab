@@ -2,7 +2,7 @@
   "name": "discord-role-cleanup-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Discord bot for role cleanup, unverified reminders, and logging.",
+  "description": "Discord bot for role cleanup, Twitch linking, and live role automation.",
   "main": "src/index.js",
   "scripts": {
     "start": "node -r dotenv/config src/index.js",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "discord.js": "^14.19.3",
-    "dotenv": "^16.6.1"
+    "dotenv": "^16.6.1",
+    "pg": "^8.20.0"
   }
 }

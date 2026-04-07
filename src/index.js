@@ -501,6 +501,22 @@ async function getApprovedTwitchStreamersMap() {
   return streamersMap;
 }
 
+async function listPendingTwitchLinks() {
+  if (!await ensureDatabaseReady()) {
+    return [];
+  }
+
+  const result = await databaseState.pool.query(`
+    SELECT discord_user_id, twitch_login, approved, created_at, updated_at, approved_at, denied_at
+    FROM twitch_links
+    WHERE approved = FALSE
+    ORDER BY updated_at ASC, created_at ASC
+  `);
+
+  return result.rows.map(mapTwitchLinkRow);
+}
+
+
 async function fetchTwitchAppAccessToken(forceRefresh = false) {
   const now = Date.now();
   if (!forceRefresh && twitchState.accessToken && twitchState.accessTokenExpiresAt > now) {
@@ -1117,5 +1133,7 @@ client.login(config.botToken).catch((error) => {
   console.error("Failed to log in to Discord:", error);
   process.exitCode = 1;
 });
+
+
 
 

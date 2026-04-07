@@ -62,7 +62,8 @@ This repo includes `render.yaml`. On Render:
 2. Confirm the build command is `npm install`.
 3. Confirm the start command is `npm start`.
 4. Set `DISCORD_BOT_TOKEN`, your Discord IDs, `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, and `DATABASE_URL`.
-5. Leave `DATABASE_SSL=true` unless your local Postgres setup needs it disabled.
+5. Set DATABASE_SSL=false on Render when using the internal database URL.
+6. For local development against the external database URL, set DATABASE_SSL=true.
 
 ## Notes
 
@@ -71,3 +72,6 @@ The Twitch poller batches `Get Streams` requests in groups of up to 100 login na
 Manual `/live` and `/unlive` still work as a fallback lane. Manual timeout removal will not strip the role while Twitch still reports that user as live.
 
 This bot does not expose an HTTP server, so a Render worker is the right fit.
+
+
+

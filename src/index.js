@@ -124,6 +124,7 @@ const config = {
   liveNowRoleId: parseRequiredId("LIVE_NOW_ROLE_ID"),
   logChannelId: parseRequiredId("LOG_CHANNEL_ID"),
   liveRoleDurationMs: parseDurationMs("LIVE_ROLE_DURATION_MS", 2 * 60 * 60 * 1000),
+  liveNowChannelId: parseOptionalId("LIVE_NOW_CHANNEL_ID"),
   twitchClientId: parseOptionalId("TWITCH_CLIENT_ID"),
   twitchClientSecret: parseOptionalId("TWITCH_CLIENT_SECRET"),
   twitchPollIntervalMs: parseDurationMs("TWITCH_POLL_INTERVAL_MS", TWITCH_DEFAULT_POLL_INTERVAL_MS),
@@ -162,6 +163,8 @@ const twitchState = {
   pollInFlight: false,
   offlineCounts: new Map(),
   liveDiscordIds: new Set(),
+  livePosts: new Map(),
+  livePostsPrimed: false,
 };
 
 const moderatorPermission = PermissionsBitField.Flags.ManageRoles;
@@ -348,9 +351,35 @@ async function fetchGuildResources(guild) {
   const unverifiedRole = guild.roles.cache.get(config.unverifiedRoleId) || await guild.roles.fetch(config.unverifiedRoleId).catch(() => null);
   const liveNowRole = guild.roles.cache.get(config.liveNowRoleId) || await guild.roles.fetch(config.liveNowRoleId).catch(() => null);
   const logChannel = guild.channels.cache.get(config.logChannelId) || await guild.channels.fetch(config.logChannelId).catch(() => null);
+  const liveNowChannel = config.liveNowChannelId
+    ? (guild.channels.cache.get(config.liveNowChannelId) || await guild.channels.fetch(config.liveNowChannelId).catch(() => null))
+    : null;
 
-  return { verifiedRole, unverifiedRole, liveNowRole, logChannel };
+  return { verifiedRole, unverifiedRole, liveNowRole, logChannel, liveNowChannel };
 }
+
+async function sendLiveNowPostSafe(liveNowChannel, liveStream) {
+  if (!config.liveNowChannelId) {
+    return null;
+  }
+
+  if (!liveNowChannel || !liveNowChannel.isTextBased()) {
+    console.error(`Live now channel is missing or invalid for Twitch live posts. Channel ID: ${config.liveNowChannelId}`);
+    return null;
+  }
+
+  const message = `\uD83D\uDD34 **${liveStream.displayName} is now live!**` + "\n" + `https://twitch.tv/${liveStream.twitchLogin}`;
+
+  try {
+    const sentMessage = await liveNowChannel.send(message);
+    console.log(`Sent live now post for ${liveStream.twitchLogin}.`);
+    return sentMessage.id;
+  } catch (error) {
+    console.error(`Failed to send live now post for ${liveStream.twitchLogin}:`, error.message);
+    return null;
+  }
+}
+
 
 async function registerGuildCommands() {
   const targetGuilds = getTargetGuilds();
@@ -604,7 +633,7 @@ async function validateTwitchLoginWithApi(twitchLogin) {
   return { ok: true, twitchLogin: user.login.toLowerCase() };
 }
 
-async function fetchTwitchLiveLogins(streamerMap) {
+async function fetchTwitchLiveStreams(streamerMap) {
   const streamerEntries = Object.entries(streamerMap);
   const uniqueLogins = [...new Set(streamerEntries.map(([, login]) => login))];
   const loginChunks = chunkArray(uniqueLogins, TWITCH_API_CHUNK_SIZE);
@@ -613,7 +642,7 @@ async function fetchTwitchLiveLogins(streamerMap) {
     `Starting Twitch poll. Configured streamers: ${streamerEntries.length}. Unique logins: ${uniqueLogins.length}. Chunks: ${loginChunks.length}.`,
   );
 
-  const liveLogins = new Set();
+  const liveStreams = new Map();
 
   for (const loginChunk of loginChunks) {
     const url = new URL(`${TWITCH_HELIX_BASE_URL}/streams`);
@@ -636,13 +665,17 @@ async function fetchTwitchLiveLogins(streamerMap) {
     const payload = await response.json();
     for (const stream of payload.data || []) {
       if (typeof stream.user_login === "string") {
-        liveLogins.add(stream.user_login.toLowerCase());
+        const normalizedLogin = stream.user_login.toLowerCase();
+        liveStreams.set(normalizedLogin, {
+          twitchLogin: normalizedLogin,
+          displayName: typeof stream.user_name === "string" ? stream.user_name : normalizedLogin,
+        });
       }
     }
   }
 
-  console.log(`Twitch poll complete. Live streamers found: ${liveLogins.size}.`);
-  return liveLogins;
+  console.log(`Twitch poll complete. Live streamers found: ${liveStreams.size}.`);
+  return liveStreams;
 }
 
 async function fetchConfiguredMembers(guild, discordUserIds) {
@@ -675,8 +708,8 @@ async function fetchConfiguredMembers(guild, discordUserIds) {
   return memberMap;
 }
 
-async function reconcileTwitchRolesForGuild(guild, streamerMap, liveLogins, aggregatedLiveDiscordIds) {
-  const { liveNowRole, logChannel } = await fetchGuildResources(guild);
+async function reconcileTwitchRolesForGuild(guild, streamerMap, liveStreams, aggregatedLiveDiscordIds) {
+  const { liveNowRole, logChannel, liveNowChannel } = await fetchGuildResources(guild);
   if (!liveNowRole) {
     console.warn(`Missing Live Now role in guild "${guild.name}". Skipping Twitch sync.`);
     return;
@@ -697,12 +730,22 @@ async function reconcileTwitchRolesForGuild(guild, streamerMap, liveLogins, aggr
       continue;
     }
 
-    const isLiveOnTwitch = liveLogins.has(twitchLogin);
+    const liveStream = liveStreams.get(twitchLogin);
+    const isLiveOnTwitch = Boolean(liveStream);
     const hasLiveRole = member.roles.cache.has(liveNowRole.id);
 
     if (isLiveOnTwitch) {
       aggregatedLiveDiscordIds.add(discordUserId);
       twitchState.offlineCounts.delete(discordUserId);
+
+      if (!twitchState.livePosts.has(twitchLogin)) {
+        if (twitchState.livePostsPrimed) {
+          const livePostId = await sendLiveNowPostSafe(liveNowChannel, liveStream);
+          twitchState.livePosts.set(twitchLogin, livePostId || true);
+        } else {
+          twitchState.livePosts.set(twitchLogin, true);
+        }
+      }
 
       if (!hasLiveRole) {
         const added = await addRoleSafe(member, liveNowRole, "Twitch live detection: streamer is live");
@@ -713,6 +756,11 @@ async function reconcileTwitchRolesForGuild(guild, streamerMap, liveLogins, aggr
       }
 
       continue;
+    }
+
+    if (twitchState.livePosts.has(twitchLogin)) {
+      twitchState.livePosts.delete(twitchLogin);
+      console.log(`Cleared live post state for ${twitchLogin} because Twitch reports them offline.`);
     }
 
     const nextOfflineCount = (twitchState.offlineCounts.get(discordUserId) || 0) + 1;
@@ -757,17 +805,18 @@ async function runTwitchPollCycle() {
       return;
     }
 
-    const liveLogins = await fetchTwitchLiveLogins(approvedStreamersMap);
-    if (liveLogins === null) {
+    const liveStreams = await fetchTwitchLiveStreams(approvedStreamersMap);
+    if (liveStreams === null) {
       return;
     }
 
     const aggregatedLiveDiscordIds = new Set();
     for (const guild of getTargetGuilds()) {
-      await reconcileTwitchRolesForGuild(guild, approvedStreamersMap, liveLogins, aggregatedLiveDiscordIds);
+      await reconcileTwitchRolesForGuild(guild, approvedStreamersMap, liveStreams, aggregatedLiveDiscordIds);
     }
 
     twitchState.liveDiscordIds = aggregatedLiveDiscordIds;
+    twitchState.livePostsPrimed = true;
   } catch (error) {
     console.error("Twitch poll cycle failed:", error.message);
   } finally {
@@ -1133,6 +1182,16 @@ client.login(config.botToken).catch((error) => {
   console.error("Failed to log in to Discord:", error);
   process.exitCode = 1;
 });
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -8,6 +8,7 @@ Small `discord.js` bot for:
 - letting members use `/unlive` to remove the "Live Now" role manually
 - linking Discord users to Twitch accounts with moderator approval
 - automatically syncing the same "Live Now" role from approved Twitch live status
+- posting once in the live-now channel when a tracked streamer goes live
 - automatically removing the manual live role after a configurable delay when Twitch is not reporting the user as live
 - running a startup scan once per process to clean up members who already have both verification roles
 
@@ -33,6 +34,7 @@ npm run dev
 - `VERIFIED_ROLE_ID`
 - `UNVERIFIED_ROLE_ID`
 - `LIVE_NOW_ROLE_ID`
+- `LIVE_NOW_CHANNEL_ID`
 - `LOG_CHANNEL_ID`
 
 ## Twitch and database environment variables
@@ -61,7 +63,7 @@ This repo includes `render.yaml`. On Render:
 1. Create a new Worker Service from this repo.
 2. Confirm the build command is `npm install`.
 3. Confirm the start command is `npm start`.
-4. Set `DISCORD_BOT_TOKEN`, your Discord IDs, `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, and `DATABASE_URL`.
+4. Set `DISCORD_BOT_TOKEN`, your Discord IDs, `LIVE_NOW_CHANNEL_ID`, `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, and `DATABASE_URL`.
 5. Set DATABASE_SSL=false on Render when using the internal database URL.
 6. For local development against the external database URL, set DATABASE_SSL=true.
 
@@ -72,6 +74,7 @@ The Twitch poller batches `Get Streams` requests in groups of up to 100 login na
 Manual `/live` and `/unlive` still work as a fallback lane. Manual timeout removal will not strip the role while Twitch still reports that user as live.
 
 This bot does not expose an HTTP server, so a Render worker is the right fit.
+
 
 
 

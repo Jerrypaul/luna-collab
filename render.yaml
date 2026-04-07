@@ -31,3 +31,4 @@ services:
         sync: false
       - key: DATABASE_SSL
         value: "true"
+

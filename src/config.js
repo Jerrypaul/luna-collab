@@ -22,6 +22,24 @@ function parseOptionalString(name, fallback) {
   return value;
 }
 
+function parseBoolean(name, fallback) {
+  const value = process.env[name];
+  if (!value) {
+    return fallback;
+  }
+
+  const normalized = value.toLowerCase();
+  if (["true", "1", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["false", "0", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  throw new Error(`Invalid boolean environment variable: ${name}`);
+}
+
 function parseDurationMs(name, fallback) {
   const value = process.env[name];
   if (!value) {
@@ -51,6 +69,7 @@ function loadConfig() {
     twitchPollIntervalMs: parseDurationMs("TWITCH_POLL_INTERVAL_MS", TWITCH_DEFAULT_POLL_INTERVAL_MS),
     databaseUrl: parseOptionalId("DATABASE_URL"),
     databaseSsl: parseOptionalString("DATABASE_SSL", "true"),
+    twitchLinkRequireApproval: parseBoolean("TWITCH_LINK_REQUIRE_APPROVAL", false),
   };
 }
 

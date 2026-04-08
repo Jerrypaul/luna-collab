@@ -50,9 +50,31 @@ function createTwitchLinksStore(config) {
       )
     `);
 
+    await state.pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS twitch_links_twitch_login_unique
+      ON twitch_links (LOWER(twitch_login))
+    `);
+
     state.ready = true;
     console.log("Postgres storage ready for Twitch links.");
     return true;
+  }
+
+  async function getByTwitchLogin(twitchLogin) {
+    if (!await ensureReady()) {
+      return null;
+    }
+
+    const result = await state.pool.query(
+      `
+        SELECT discord_user_id, twitch_login, approved, created_at, updated_at, approved_at, denied_at
+        FROM twitch_links
+        WHERE LOWER(twitch_login) = LOWER($1)
+      `,
+      [normalizeTwitchLogin(twitchLogin)],
+    );
+
+    return mapTwitchLinkRow(result.rows[0] || null);
   }
 
   async function getByDiscordUserId(discordUserId) {
@@ -72,7 +94,7 @@ function createTwitchLinksStore(config) {
     return mapTwitchLinkRow(result.rows[0] || null);
   }
 
-  async function upsert(discordUserId, twitchLogin) {
+  async function upsert(discordUserId, twitchLogin, approved = false) {
     await ensureReady();
 
     const result = await state.pool.query(
@@ -86,22 +108,21 @@ function createTwitchLinksStore(config) {
           approved_at,
           denied_at
         )
-        VALUES ($1, $2, FALSE, NOW(), NOW(), NULL, NULL)
+        VALUES ($1, $2, $3, NOW(), NOW(), CASE WHEN $3 THEN NOW() ELSE NULL END, CASE WHEN $3 THEN NULL ELSE NOW() END)
         ON CONFLICT (discord_user_id)
         DO UPDATE SET
           twitch_login = EXCLUDED.twitch_login,
-          approved = FALSE,
+          approved = EXCLUDED.approved,
           updated_at = NOW(),
-          approved_at = NULL,
-          denied_at = NULL
+          approved_at = CASE WHEN EXCLUDED.approved THEN NOW() ELSE NULL END,
+          denied_at = CASE WHEN EXCLUDED.approved THEN NULL ELSE NOW() END
         RETURNING discord_user_id, twitch_login, approved, created_at, updated_at, approved_at, denied_at
       `,
-      [String(discordUserId), normalizeTwitchLogin(twitchLogin)],
+      [String(discordUserId), normalizeTwitchLogin(twitchLogin), approved],
     );
 
     return mapTwitchLinkRow(result.rows[0]);
   }
-
   async function remove(discordUserId) {
     await ensureReady();
 
@@ -174,6 +195,7 @@ function createTwitchLinksStore(config) {
   return {
     ensureReady,
     getByDiscordUserId,
+    getByTwitchLogin,
     upsert,
     remove,
     setApproval,

@@ -98,7 +98,7 @@ function createCommandHandlers({
       return;
     }
 
-    const { liveNowRole, logChannel } = await fetchGuildResources(interaction.guild, config);
+    const { verifiedRole, liveNowRole, logChannel } = await fetchGuildResources(interaction.guild, config);
 
     if (["live", "unlive"].includes(interaction.commandName)) {
       if (!liveNowRole) {
@@ -165,6 +165,14 @@ function createCommandHandlers({
     }
 
     if (interaction.commandName === "linktwitch") {
+      if (!verifiedRole || !member.roles.cache.has(verifiedRole.id)) {
+        await interaction.reply({
+          content: "You must complete Linked Roles verification before linking your Twitch.\nGo to Server Settings -> Linked Roles -> Apply / Verify",
+          ephemeral: true,
+        });
+        return;
+      }
+
       if (!twitchApi.isConfigured()) {
         await interaction.reply({ content: "Twitch linking is currently unavailable because Twitch API credentials are not configured.", ephemeral: true });
         return;
@@ -196,12 +204,28 @@ function createCommandHandlers({
         return;
       }
 
-      const savedLink = await twitchLinksStore.upsert(interaction.user.id, validationResult.twitchLogin);
-      await interaction.reply({ content: `Saved Twitch link \`${savedLink.twitchLogin}\`. It is pending moderator approval before automatic live detection will use it.`, ephemeral: true });
-      await sendLogSafe(logChannel, `Twitch link requested by ${interaction.user}: \`${savedLink.twitchLogin}\` (pending approval).`);
+      const conflictingLink = await twitchLinksStore.getByTwitchLogin(validationResult.twitchLogin);
+      if (conflictingLink && conflictingLink.discordUserId !== interaction.user.id) {
+        await interaction.reply({ content: "That Twitch account is already linked to another Discord member. Please contact a moderator if you believe this is incorrect.", ephemeral: true });
+        return;
+      }
+
+      const requiresApproval = config.twitchLinkRequireApproval;
+      const savedLink = await twitchLinksStore.upsert(interaction.user.id, validationResult.twitchLogin, !requiresApproval);
+
+      if (requiresApproval) {
+        await interaction.reply({ content: `Saved Twitch link \`${savedLink.twitchLogin}\`. It is pending moderator approval before automatic live detection will use it.`, ephemeral: true });
+        await sendLogSafe(logChannel, `Twitch link requested by ${interaction.user}: \`${savedLink.twitchLogin}\` (pending approval).`);
+        return;
+      }
+
+      await interaction.reply({ content: `Saved Twitch link \`${savedLink.twitchLogin}\`. Automatic live detection is now enabled for your account.`, ephemeral: true });
+      await sendLogSafe(logChannel, `Twitch link auto-approved for ${interaction.user}: \`${savedLink.twitchLogin}\`.`);
+      if (twitchPoller) {
+        await twitchPoller.runPollCycle();
+      }
       return;
     }
-
     if (interaction.commandName === "unlinktwitch") {
       const removedLink = await twitchLinksStore.remove(interaction.user.id);
       if (!removedLink) {

@@ -44,6 +44,33 @@ function createTwitchPoller({
     return memberMap;
   }
 
+  async function deleteLiveNowPostSafe(liveNowChannel, twitchLogin, livePostState) {
+    if (!config.liveNowChannelId) {
+      return;
+    }
+
+    if (!liveNowChannel || !liveNowChannel.isTextBased()) {
+      console.error(`Live now channel is missing or invalid for Twitch live post cleanup. Channel ID: ${config.liveNowChannelId}`);
+      return;
+    }
+
+    if (!livePostState || typeof livePostState !== "string") {
+      return;
+    }
+
+    try {
+      const message = await liveNowChannel.messages.fetch(livePostState);
+      if (!message) {
+        return;
+      }
+
+      await message.delete();
+      console.log(`Deleted live now post for ${twitchLogin}.`);
+    } catch (error) {
+      console.error(`Failed to delete live now post for ${twitchLogin}:`, error.message);
+    }
+  }
+
   async function sendLiveNowPostSafe(liveNowChannel, liveStream) {
     if (!config.liveNowChannelId) {
       return null;
@@ -123,6 +150,8 @@ function createTwitchPoller({
       }
 
       if (twitchState.livePosts.has(twitchLogin)) {
+        const livePostState = twitchState.livePosts.get(twitchLogin);
+        await deleteLiveNowPostSafe(liveNowChannel, twitchLogin, livePostState);
         twitchState.livePosts.delete(twitchLogin);
         console.log(`Cleared live post state for ${twitchLogin} because Twitch reports them offline.`);
       }

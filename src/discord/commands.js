@@ -127,7 +127,6 @@ function createCommandHandlers({
         scheduleLiveRoleRemoval(member, liveNowRole, logChannel);
         const durationHours = config.liveRoleDurationMs / (60 * 60 * 1000);
         await interaction.reply({ content: `You now have the "Live Now" role. It will be removed automatically in ${durationHours} hour(s).`, ephemeral: true });
-        await sendLogSafe(logChannel, `Assigned ${liveNowRole} to ${interaction.user} via /live. It will be removed automatically in ${durationHours} hour(s).`);
         return;
       }
 
@@ -144,7 +143,6 @@ function createCommandHandlers({
       }
 
       await interaction.reply({ content: 'The "Live Now" role has been removed.', ephemeral: true });
-      await sendLogSafe(logChannel, `Removed ${liveNowRole} from ${interaction.user} via /unlive.`);
       return;
     }
 

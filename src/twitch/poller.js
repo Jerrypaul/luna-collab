@@ -12,7 +12,6 @@ function createTwitchPoller({
   fetchGuildResources,
   addRoleSafe,
   removeRoleSafe,
-  sendLogSafe,
 }) {
   async function fetchConfiguredMembers(guild, discordUserIds) {
     const memberMap = new Map();
@@ -100,7 +99,7 @@ function createTwitchPoller({
   }
 
   async function reconcileGuild(guild, streamerMap, liveStreams, aggregatedLiveDiscordIds) {
-    const { liveNowRole, logChannel, liveNowChannel } = await fetchGuildResources(guild, config);
+    const { liveNowRole, liveNowChannel } = await fetchGuildResources(guild, config);
     if (!liveNowRole) {
       console.warn(`Missing Live Now role in guild "${guild.name}". Skipping Twitch sync.`);
       return;
@@ -142,7 +141,6 @@ function createTwitchPoller({
           const added = await addRoleSafe(member, liveNowRole, "Twitch live detection: streamer is live");
           if (added) {
             addedCount += 1;
-            await sendLogSafe(logChannel, `Assigned ${liveNowRole} to ${member} because Twitch reports them live.`);
           }
         }
 
@@ -167,7 +165,6 @@ function createTwitchPoller({
         const removed = await removeRoleSafe(member, liveNowRole, "Twitch live detection: streamer is offline");
         if (removed) {
           removedCount += 1;
-          await sendLogSafe(logChannel, `Removed ${liveNowRole} from ${member} because Twitch reports them offline.`);
         }
       }
     }

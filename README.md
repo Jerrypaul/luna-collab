@@ -20,7 +20,7 @@ Small `discord.js` bot for:
 4. Run `npm install`.
 5. Run `npm start`.
 
-After the bot starts in your guild, Discord should register `/live`, `/unlive`, `/linktwitch`, `/unlinktwitch`, `/mytwitch`, `/approvetwitch`, and `/denytwitch`.
+After the bot starts in your guild, Discord should register `/live`, `/unlive`, `/linktwitch`, `/unlinktwitch`, `/mytwitch`, `/approvetwitch`, `/denytwitch`, and `/pendingtwitch`.
 
 For local development, you can also use:
 
@@ -48,6 +48,7 @@ npm run dev
 ## How Twitch linking works
 
 - `/linktwitch username:<string>` validates the Twitch username through the Twitch API and stores it in Postgres.
+- `/linktwitch username:<string> user:<discord user>` lets a Discord administrator manually add and approve a Twitch link for another user.
 - `/mytwitch` shows the caller's current Twitch link and approval state.
 - `/unlinktwitch` removes the caller's mapping.
 - `/approvetwitch user:<discord user>` marks that mapping approved.

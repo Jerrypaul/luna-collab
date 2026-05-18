@@ -16,6 +16,7 @@ function createCommandHandlers({
 }) {
   const moderatorPermission = PermissionsBitField.Flags.ManageRoles;
   const moderatorPermissionString = moderatorPermission.toString();
+  const administratorPermission = PermissionsBitField.Flags.Administrator;
 
   const slashCommandDefinitions = [
     { name: "live", description: 'Add the "Live Now" role to yourself.' },
@@ -23,7 +24,10 @@ function createCommandHandlers({
     {
       name: "linktwitch",
       description: "Request linking your Discord account to a Twitch username.",
-      options: [{ name: "username", description: "Your Twitch login name.", type: ApplicationCommandOptionType.String, required: true }],
+      options: [
+        { name: "username", description: "The Twitch login name.", type: ApplicationCommandOptionType.String, required: true },
+        { name: "user", description: "Admin only: the Discord user to link.", type: ApplicationCommandOptionType.User, required: false },
+      ],
     },
     { name: "unlinktwitch", description: "Remove your current Twitch link." },
     { name: "mytwitch", description: "View your current Twitch link and approval status." },
@@ -48,6 +52,10 @@ function createCommandHandlers({
 
   function canUseModeratorCommands(interaction) {
     return Boolean(interaction.memberPermissions?.has(moderatorPermission));
+  }
+
+  function canUseAdministratorCommands(interaction) {
+    return Boolean(interaction.memberPermissions?.has(administratorPermission));
   }
 
   function getTargetGuilds(client) {
@@ -163,7 +171,15 @@ function createCommandHandlers({
     }
 
     if (interaction.commandName === "linktwitch") {
-      if (!verifiedRole || !member.roles.cache.has(verifiedRole.id)) {
+      const targetUser = interaction.options.getUser("user") || interaction.user;
+      const linkingAnotherUser = targetUser.id !== interaction.user.id;
+
+      if (linkingAnotherUser && !canUseAdministratorCommands(interaction)) {
+        await interaction.reply({ content: "You do not have permission to link Twitch accounts for other users.", ephemeral: true });
+        return;
+      }
+
+      if (!linkingAnotherUser && (!verifiedRole || !member.roles.cache.has(verifiedRole.id))) {
         await interaction.reply({
           content: "You must complete Linked Roles verification before linking your Twitch.\nGo to Server Settings -> Linked Roles -> Apply / Verify",
           ephemeral: true,
@@ -196,20 +212,30 @@ function createCommandHandlers({
         return;
       }
 
-      const existingLink = await twitchLinksStore.getByDiscordUserId(interaction.user.id);
+      const existingLink = await twitchLinksStore.getByDiscordUserId(targetUser.id);
       if (existingLink && existingLink.twitchLogin === validationResult.twitchLogin) {
-        await interaction.reply({ content: `Your Twitch account is already linked as \`${existingLink.twitchLogin}\` and is currently ${formatApprovalStatus(existingLink)}.`, ephemeral: true });
+        const ownerLabel = linkingAnotherUser ? `${targetUser}'s Twitch account` : "Your Twitch account";
+        await interaction.reply({ content: `${ownerLabel} is already linked as \`${existingLink.twitchLogin}\` and is currently ${formatApprovalStatus(existingLink)}.`, ephemeral: true });
         return;
       }
 
       const conflictingLink = await twitchLinksStore.getByTwitchLogin(validationResult.twitchLogin);
-      if (conflictingLink && conflictingLink.discordUserId !== interaction.user.id) {
+      if (conflictingLink && conflictingLink.discordUserId !== targetUser.id) {
         await interaction.reply({ content: "That Twitch account is already linked to another Discord member. Please contact a moderator if you believe this is incorrect.", ephemeral: true });
         return;
       }
 
-      const requiresApproval = config.twitchLinkRequireApproval;
-      const savedLink = await twitchLinksStore.upsert(interaction.user.id, validationResult.twitchLogin, !requiresApproval);
+      const requiresApproval = config.twitchLinkRequireApproval && !linkingAnotherUser;
+      const savedLink = await twitchLinksStore.upsert(targetUser.id, validationResult.twitchLogin, !requiresApproval);
+
+      if (linkingAnotherUser) {
+        await interaction.reply({ content: `Saved and approved Twitch link \`${savedLink.twitchLogin}\` for ${targetUser}.`, ephemeral: true });
+        await sendLogSafe(logChannel, `Twitch link manually added by ${interaction.user} for ${targetUser}: \`${savedLink.twitchLogin}\`.`);
+        if (twitchPoller) {
+          await twitchPoller.runPollCycle();
+        }
+        return;
+      }
 
       if (requiresApproval) {
         await interaction.reply({ content: `Saved Twitch link \`${savedLink.twitchLogin}\`. It is pending moderator approval before automatic live detection will use it.`, ephemeral: true });
